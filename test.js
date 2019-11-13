@@ -9,7 +9,7 @@ test('Should register the plugin and index the data', async t => {
   const fastify = Fastify()
   fastify
     .register(elasticsearch, { node: 'http://localhost:9200' })
-    .register(dataset)
+    .register(dataset, { indexName: 'tweets' })
 
   await fastify.ready()
 
