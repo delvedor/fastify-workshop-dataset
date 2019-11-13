@@ -1,13 +1,16 @@
 'use strict'
 
+const assert = require('assert')
 const Hyperid = require('hyperid')
 const fp = require('fastify-plugin')
 
 async function datasetPlugin (fastify, opts) {
+  assert(opts.indexName, 'Missing indexName option')
   fastify.decorate('generateTimelineQuery', generateTimelineQuery)
+  fastify.decorate('sanitizeIndexName', sanitizeIndexName)
 
   const { elastic } = fastify
-  const { body: exists } = await elastic.indices.exists({ index: 'tweets' })
+  const { body: exists } = await elastic.indices.exists({ index: opts.indexName })
   if (exists) return
 
   const hyperid = Hyperid({ urlSafe: true })
@@ -15,7 +18,7 @@ async function datasetPlugin (fastify, opts) {
   fastify.log.info('Missing dataset, started indexing operation')
 
   await elastic.indices.create({
-    index: 'tweets',
+    index: opts.indexName,
     body: {
       mappings: {
         properties: {
@@ -40,7 +43,7 @@ async function datasetPlugin (fastify, opts) {
         .split(' ')
         .filter(w => w.startsWith('#'))
         .map(w => w.slice(1).replace(/[.,\s]/g, ''))
-      return [{ index: { _index: 'tweets', _id: doc.id } }, doc]
+      return [{ index: { _index: opts.indexName, _id: doc.id } }, doc]
     })
 
   const { body } = await elastic.bulk({ body: flat(dataset) })
@@ -50,6 +53,16 @@ async function datasetPlugin (fastify, opts) {
   }
 
   fastify.log.info('Dataset indexed!')
+}
+
+function sanitizeIndexName (name) {
+  assert(name !== '.')
+  assert(name !== '..')
+  name = name.replace(/[^-_A-Za-z0-9]/g, '_').toLowerCase()
+  if (name[0] === '_' || name[0] === '-' || name[0] === '+') {
+    name = name.slice(1)
+  }
+  return name
 }
 
 function generateTimelineQuery (topics, from) {
@@ -178,3 +191,4 @@ function flat (arr) {
 module.exports = fp(datasetPlugin, {
   dependencies: ['fastify-elasticsearch']
 })
+module.exports.sanitizeIndexName = sanitizeIndexName
